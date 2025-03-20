@@ -17,7 +17,7 @@ const API_OPTIONS = {
 const App = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [movieList, setmovieList] = useState([]);
+  const [movieList, setMovieList] = useState([]);
   const [trendingMovies, setTrendingMovies] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
@@ -32,41 +32,69 @@ const App = () => {
       const endpoint = query
         ? `${API_BASE_URL}/search/movie?query=${encodeURIComponent(query)}`
         : `${API_BASE_URL}/discover/movie?sort_by=popularity.desc`;
+      
+      console.log("Fetching from:", endpoint);
       const response = await fetch(endpoint, API_OPTIONS);
 
       if (!response.ok) {
-        throw new Error("Failed to fetch movies");
+        throw new Error(`Failed to fetch movies: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log("API Response:", data);
 
-      if (data.response == "False") {
-        setErrorMessage(
-          data.Error || "Error fetching movies. Please try again later."
-        );
-        setmovieList([]);
-        return;
-      }
-      setmovieList(data.results || []);
-
-      if (query && data.results.length > 0) {
-        await updateSearchCount(query, data.results[0]);
+      if (data.results && Array.isArray(data.results)) {
+        setMovieList(data.results);
+      } else {
+        setErrorMessage("No movies found or invalid response format");
+        setMovieList([]);
       }
     } catch (error) {
-      console.error(`Error fetching movies: ${error}`);
+      console.error(`Error fetching movies:`, error);
       setErrorMessage("Error fetching movies. Please try again later.");
+      setMovieList([]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const getTrendingMovies = async () => {
+    try {
+      const endpoint = `${API_BASE_URL}/trending/movie/week`;
+      console.log("Fetching trending movies from:", endpoint);
+      
+      const response = await fetch(endpoint, API_OPTIONS);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch trending movies: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log("Trending API Response:", data);
+      
+      return data.results || [];
+    } catch (error) {
+      console.error("Error fetching trending movies:", error);
+      return [];
     }
   };
 
   const loadTrendingMovies = async () => {
     try {
       const movies = await getTrendingMovies();
-
-      setTrendingMovies(movies);
+      
+      // Transform the movies to match your expected format
+      const formattedMovies = movies.slice(0, 5).map(movie => ({
+        $id: movie.id,
+        title: movie.title,
+        poster_url: movie.poster_path 
+          ? `https://image.tmdb.org/t/p/w200${movie.poster_path}`
+          : './placeholder.png'
+      }));
+      
+      setTrendingMovies(formattedMovies);
     } catch (error) {
-      console.error(`Error fetching movies: ${error}`);
+      console.error(`Error loading trending movies:`, error);
     }
   };
 
@@ -77,6 +105,7 @@ const App = () => {
   useEffect(() => {
     loadTrendingMovies();
   }, []);
+
   return (
     <main>
       <div className="pattern" />
@@ -113,12 +142,14 @@ const App = () => {
             <Spinner />
           ) : errorMessage ? (
             <p className="text-red-600">{errorMessage}</p>
-          ) : (
+          ) : movieList.length > 0 ? (
             <ul>
               {movieList.map((movie) => (
                 <MovieCard key={movie.id} movie={movie} />
               ))}
             </ul>
+          ) : (
+            <p>No movies found. Try another search.</p>
           )}
         </section>
       </div>
